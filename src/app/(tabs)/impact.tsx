@@ -1,4 +1,4 @@
-import { supabase } from '@/services/supabase'; // Fixes the 'supabase' error
+import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -10,16 +10,13 @@ export default function ImpactScreen() {
 
   const DUMMY_USER_ID = 'user-123';
 
-  // This runs when the screen loads
   useEffect(() => {
     fetchImpactData();
   }, []);
 
-  // Fixes the 'fetchImpactData' error
   const fetchImpactData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Point Balances
       const { data: profile } = await supabase
         .from('profiles')
         .select('pending_points, approved_points')
@@ -27,10 +24,12 @@ export default function ImpactScreen() {
         .single();
 
       if (profile) {
-        setPoints({ pending: profile.pending_points, approved: profile.approved_points });
+        setPoints({ 
+          pending: profile.pending_points ?? 0, 
+          approved: profile.approved_points ?? 0 
+        });
       }
 
-      // 2. Fetch History
       const { data: scans } = await supabase
         .from('scans_history')
         .select('*')
@@ -40,40 +39,43 @@ export default function ImpactScreen() {
 
       if (scans) setRecentScans(scans);
     } catch (error) {
-      console.error(error);
+      console.error("Fetch Error:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  // The logic for the "Drop-off" simulation
   const handleConfirmDropoff = async () => {
     if (points.pending === 0) {
       Alert.alert("No pending items", "Scan some items first!");
       return;
     }
 
-    const { error } = await supabase.rpc('confirm_donation_dropoff', { 
-      p_user_id: DUMMY_USER_ID 
-    });
+    try {
+      const newApprovedTotal = (points.approved || 0) + (points.pending || 0);
+      
+      await supabase.from('profiles').update({ 
+        pending_points: 0, 
+        approved_points: newApprovedTotal 
+      }).eq('user_id', DUMMY_USER_ID);
 
-    // If the RPC above is too complex for now, we'll use this simpler manual update:
-    const newApprovedTotal = points.approved + points.pending;
-    
-    await supabase.from('profiles').update({ 
-      pending_points: 0, 
-      approved_points: newApprovedTotal 
-    }).eq('user_id', DUMMY_USER_ID);
+      await supabase.from('scans_history').update({ 
+        status: 'approved' 
+      }).eq('user_id', DUMMY_USER_ID).eq('status', 'pending');
 
-    await supabase.from('scans_history').update({ 
-      status: 'approved' 
-    }).eq('user_id', DUMMY_USER_ID).eq('status', 'pending');
-
-    Alert.alert("Success!", "Your points are now approved! 🍃");
-    fetchImpactData();
+      Alert.alert("Success!", "Your points are now approved! 🍃");
+      fetchImpactData();
+    } catch (err) {
+      console.error("Update Error:", err);
+    }
   };
 
-  if (loading) return <ActivityIndicator size="large" color="#4CAF50" style={{ flex: 1 }} />;
+  // Explicitly passing true to animating prop
+  if (loading) return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <ActivityIndicator size="large" color="#4CAF50" animating={true} />
+    </View>
+  );
 
   return (
     <ScrollView style={styles.container}>
@@ -81,7 +83,6 @@ export default function ImpactScreen() {
         <Text style={styles.headerTitle}>Your Impact</Text>
       </View>
 
-      {/* Point Summary Cards */}
       <View style={styles.statsRow}>
         <View style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}>
           <Text style={styles.statLabel}>Pending</Text>
@@ -93,30 +94,40 @@ export default function ImpactScreen() {
         </View>
       </View>
 
-      {/* Drop-off Button */}
-      <TouchableOpacity style={styles.dropoffButton} onPress={handleConfirmDropoff}>
+      <TouchableOpacity style={styles.dropoffButton} onPress={handleConfirmDropoff} activeOpacity={0.7}>
         <Ionicons name="location" size={20} color="white" />
         <Text style={styles.dropoffText}>Confirm Goodwill Drop-off</Text>
       </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Recent Activity</Text>
-      {recentScans.map((scan: any) => (
-        <View key={scan.id} style={styles.historyItem}>
-          <View>
-            <Text style={styles.itemName}>{scan.item_name}</Text>
-            <Text style={styles.categoryText}>{scan.category}</Text>
+      
+      {/* Safeguard the map: only render if items exist and use a unique key */}
+      {recentScans && recentScans.length > 0 ? (
+        recentScans.map((scan) => (
+          <View key={scan.id?.toString()} style={styles.historyItem}>
+            <View>
+              <Text style={styles.itemName}>{scan.item_name || 'Unknown Item'}</Text>
+              <Text style={styles.categoryText}>{scan.category || 'Other'}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.pointsAdd}>+{scan.points_awarded || 0} pts</Text>
+              <Text style={[
+                styles.statusTag, 
+                { color: scan.status === 'approved' ? '#4CAF50' : '#FF9800' }
+              ]}>
+                {(scan.status || 'pending').toUpperCase()}
+              </Text>
+            </View>
           </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.pointsAdd}>+{scan.points_awarded} pts</Text>
-            <Text style={[styles.statusTag, { color: scan.status === 'approved' ? '#4CAF50' : '#FF9800' }]}>
-              {scan.status.toUpperCase()}
-            </Text>
-          </View>
-        </View>
-      ))}
+        ))
+      ) : (
+        <Text style={{ color: '#888', textAlign: 'center', marginTop: 20 }}>No scans yet. Start recycling!</Text>
+      )}
     </ScrollView>
   );
 }
+
+// ... styles stay the same ...
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9f9f9', padding: 20 },
