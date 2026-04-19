@@ -6,7 +6,7 @@ Contributors: Adi, Shreyas, Ajay, Joe, Jason
 
 ## What it does
 
-- **Scan** items with your camera — Gemini 1.5 Flash classifies them as Resell or Recycle.
+- **Scan** items with your camera — Gemini 3.0 Preview classifies them as Resell or Recycle.
 - **Triage** — approved items get routed to the best nearby Goodwill location; redirected items get pointed to the right partner (e-waste, textile recycler, etc.).
 - **Heatmap** — see which nearby locations need what, card-based list.
 - **Schedule** drop-offs at a time slot that works for you.
@@ -15,7 +15,7 @@ Contributors: Adi, Shreyas, Ajay, Joe, Jason
 ## Tech stack
 
 - Expo (React Native) + expo-router
-- Gemini 1.5 Flash for image analysis
+- Gemini 3.0 Preview for image analysis
 - Supabase for data (locations, demand, donations, schedules)
 - Google Maps for directions
 
@@ -89,7 +89,8 @@ src/
       index.tsx          # home
       map.tsx            # demand heatmap
       impact.tsx         # dashboard
-      profile.tsx        # profile
+      profile.tsx 
+      _layout.tsx       # layout for tabs
   components/            # shared UI
   services/
     gemini.ts            # Gemini API calls
