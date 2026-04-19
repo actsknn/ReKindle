@@ -9,9 +9,26 @@ export default function ImpactScreen() {
   const [loading, setLoading] = useState(true);
 
   const DUMMY_USER_ID = 'user-123';
+  const POINT_TO_DOLLAR_RATIO = 10; // $1 = 10 points
 
   useEffect(() => {
     fetchImpactData();
+
+    const subscription = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'scans_history' },
+        () => {
+          console.log("🔥 New scan detected! Refreshing...");
+          fetchImpactData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, []);
 
   const fetchImpactData = async () => {
@@ -63,14 +80,17 @@ export default function ImpactScreen() {
         status: 'approved' 
       }).eq('user_id', DUMMY_USER_ID).eq('status', 'pending');
 
-      Alert.alert("Success!", "Your points are now approved! 🍃");
+      Alert.alert("Success!", `You just unlocked $${(points.pending / POINT_TO_DOLLAR_RATIO).toFixed(2)} in credit! 🍃`);
       fetchImpactData();
     } catch (err) {
       console.error("Update Error:", err);
     }
   };
 
-  // Explicitly passing true to animating prop
+  // Math for the UI
+  const approvedValue = (points.approved / POINT_TO_DOLLAR_RATIO).toFixed(2);
+  const pendingValue = (points.pending / POINT_TO_DOLLAR_RATIO).toFixed(2);
+
   if (loading) return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
       <ActivityIndicator size="large" color="#4CAF50" animating={true} />
@@ -83,14 +103,25 @@ export default function ImpactScreen() {
         <Text style={styles.headerTitle}>Your Impact</Text>
       </View>
 
+      {/* --- NEW CASH VALUE CARD --- */}
+      <View style={styles.creditCard}>
+        <View>
+          <Text style={styles.creditLabel}>STORE CREDIT</Text>
+          <Text style={styles.creditValue}>${approvedValue}</Text>
+        </View>
+        <Ionicons name="wallet" size={40} color="#4CAF50" />
+      </View>
+
       <View style={styles.statsRow}>
         <View style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}>
           <Text style={styles.statLabel}>Pending</Text>
           <Text style={[styles.statValue, { color: '#EF6C00' }]}>{points.pending}</Text>
+          <Text style={styles.valueEstimate}>Est. ${pendingValue}</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}>
           <Text style={styles.statLabel}>Approved</Text>
           <Text style={[styles.statValue, { color: '#2E7D32' }]}>{points.approved}</Text>
+          <Text style={styles.valueEstimate}>Earned</Text>
         </View>
       </View>
 
@@ -101,7 +132,6 @@ export default function ImpactScreen() {
 
       <Text style={styles.sectionTitle}>Recent Activity</Text>
       
-      {/* Safeguard the map: only render if items exist and use a unique key */}
       {recentScans && recentScans.length > 0 ? (
         recentScans.map((scan) => (
           <View key={scan.id?.toString()} style={styles.historyItem}>
@@ -127,16 +157,37 @@ export default function ImpactScreen() {
   );
 }
 
-// ... styles stay the same ...
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9f9f9', padding: 20 },
   header: { marginBottom: 20 },
   headerTitle: { fontSize: 28, fontWeight: '800', color: '#1a1a1a' },
+  
+  // New Styles for Credit Card
+  creditCard: { 
+    backgroundColor: 'white', 
+    padding: 25, 
+    borderRadius: 20, 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#eee',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2
+  },
+  creditLabel: { fontSize: 12, fontWeight: '800', color: '#888', letterSpacing: 1 },
+  creditValue: { fontSize: 36, fontWeight: '900', color: '#1a1a1a' },
+  valueEstimate: { fontSize: 12, fontWeight: '700', color: '#666', marginTop: 4 },
+
   statsRow: { flexDirection: 'row', gap: 15, marginBottom: 20 },
-  statCard: { flex: 1, padding: 20, borderRadius: 16, alignItems: 'center' },
+  statCard: { flex: 1, padding: 16, borderRadius: 16, alignItems: 'center' },
   statLabel: { fontSize: 14, fontWeight: '600', color: '#666', marginBottom: 5 },
-  statValue: { fontSize: 32, fontWeight: '800' },
+  statValue: { fontSize: 28, fontWeight: '800' },
+  
   dropoffButton: { backgroundColor: '#4CAF50', padding: 18, borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 30 },
   dropoffText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   sectionTitle: { fontSize: 20, fontWeight: '700', marginBottom: 15 },

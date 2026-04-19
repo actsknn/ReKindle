@@ -1,23 +1,70 @@
+import { getSmartMatch, SmartMatchResult } from "@/services/recommendations";
+import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function HomeScreen() {
   const router = useRouter();
+  
+  // State for the "Donation Bag" and the winning location
+  const [scannedItems, setScannedItems] = useState<string[]>([]);
+  const [bestLocation, setBestLocation] = useState<SmartMatchResult | null>(null);
+
+  // 1. Fetch the user's current "Pending" items to build the recommendation
+  // In a real demo, this updates as soon as they finish a scan
+  const refreshRecommendation = async () => {
+    const { data } = await supabase
+      .from('scans_history')
+      .select('category')
+      .eq('user_id', 'user-123')
+      .eq('status', 'pending');
+
+    if (data && data.length > 0) {
+      const categories = data.map(item => item.category);
+      setScannedItems(categories);
+      
+      // Call your new Smart Match Service
+      const recommendation = await getSmartMatch(categories);
+      setBestLocation(recommendation);
+    }
+  };
+
+  useEffect(() => {
+    refreshRecommendation();
+  }, []);
 
   return (
     <View style={styles.container}>
       
-      {/* 1. Dashboard Placeholder */}
       <View style={styles.dashboardCard}>
-        <Text style={styles.greeting}>Welcome back!</Text>
+        <Text style={styles.greeting}>Welcome back, Shreyas!</Text>
         <Text style={styles.statsText}>You have 150 GoodCycle Points</Text>
       </View>
 
-      {/* 2. The Big Scan Button */}
+      {/* --- SMART RECOMMENDATION CARD --- */}
+      {bestLocation && (
+        <View style={styles.recommendationCard}>
+          <View style={styles.recHeader}>
+            <Ionicons name="sparkles" size={20} color="#FFD700" />
+            <Text style={styles.recTitle}>SMART MATCH</Text>
+          </View>
+          <Text style={styles.recName}>{bestLocation.location_name}</Text>
+          <Text style={styles.recAddress}>{bestLocation.location_address}</Text>
+          <View style={styles.scoreBadge}>
+            <Text style={styles.scoreText}>+{bestLocation.total_score} Utility Points</Text>
+          </View>
+          <Text style={styles.recSubtext}>
+            Best hub for your {scannedItems.length} items.
+          </Text>
+        </View>
+      )}
+
+      {/* The Big Scan Button */}
       <TouchableOpacity 
         style={styles.bigScanButton}
-        onPress={() => router.push('/camera')} // Triggers the full-screen camera
+        onPress={() => router.push('/camera')}
         activeOpacity={0.8}
       >
         <View style={styles.buttonInner}>
@@ -57,14 +104,65 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 5,
   },
+  // --- Recommendation Card Styles ---
+  recommendationCard: {
+    width: '90%',
+    backgroundColor: '#1a1a1a', // Dark theme to match the map
+    padding: 20,
+    borderRadius: 20,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  recHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  recTitle: {
+    color: '#FFD700',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  recName: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  recAddress: {
+    color: '#aaa',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  scoreBadge: {
+    backgroundColor: '#4CAF5022',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 12,
+  },
+  scoreText: {
+    color: '#4CAF50',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  recSubtext: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
   // --- The Big Button Styles ---
   bigScanButton: {
     position: 'absolute',
-    bottom: 40, // Keeps it floating above the tab bar
-    backgroundColor: '#4CAF50', // GoodCycle Green
-    width: 160,
-    height: 160,
-    borderRadius: 80, // Makes it a perfect circle
+    bottom: 40,
+    backgroundColor: '#4CAF50',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#4CAF50',
@@ -81,7 +179,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontWeight: 'bold',
-    fontSize: 16,
-    marginTop: 10,
+    fontSize: 14,
+    marginTop: 8,
   }
 });
