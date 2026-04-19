@@ -10,7 +10,7 @@ export async function analyzeDonation(base64Image: string) {
   try {
     // We use the direct 'models' access pattern required by the @google/genai types
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash", // Flash is fastest for a live hackathon demo
+      model: "gemini-1.5-flash", // Flash is fastest for a live hackathon demo
       contents: [
         {
           role: "user",
@@ -47,7 +47,7 @@ export async function analyzeDonation(base64Image: string) {
                   "estimatedValue": number (if resellable, else 0),
                   "tip": "string"
                 }
-              `
+              `,
             },
             {
               inlineData: {
@@ -62,26 +62,26 @@ export async function analyzeDonation(base64Image: string) {
 
     // In the new SDK, 'text' is a property, not a function call
     const text = response.text;
-    
+
     // Clean up any potential markdown formatting
     const cleanJson = text?.replace(/```json|```/g, "").trim();
-    
+
     if (!cleanJson) {
       throw new Error("No response text received from Gemini API");
     }
-    
-    return JSON.parse(cleanJson);
 
+    return JSON.parse(cleanJson);
   } catch (error) {
     console.error("Gemini Sustainability Error:", error);
     return {
       item: "Analysis Error",
       decision: "Recycle",
       hazard: "Unknown",
-      reason: "The AI was unable to process this image. Please check your connection or API key.",
+      reason:
+        "The AI was unable to process this image. Please check your connection or API key.",
       category: "N/A",
       estimatedValue: 0,
-      tip: "Ensure the item is well-lit and clearly visible."
+      tip: "Ensure the item is well-lit and clearly visible.",
     };
   }
 }
