@@ -3,6 +3,15 @@ import { GoogleGenAI } from "@google/genai";
 // Access your key from the .env file
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_KEY || "";
 
+if (__DEV__) {
+  const maskedKey = API_KEY 
+    ? `****${API_KEY.slice(-4)}` 
+    : "NOT FOUND (Double check your .env file)";
+    
+  console.log("------------------------------------");
+  console.log("GEMINI API KEY STATUS:", maskedKey);
+  console.log("------------------------------------");
+}
 // Initialize the client using the newer SDK configuration style
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
@@ -10,7 +19,7 @@ export async function analyzeDonation(base64Image: string) {
   try {
     // We use the direct 'models' access pattern required by the @google/genai types
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash", // Flash is fastest for a live hackathon demo
+      model: "gemini-3-flash-preview", // Flash is fastest for a live hackathon demo
       contents: [
         {
           role: "user",
@@ -50,7 +59,7 @@ export async function analyzeDonation(base64Image: string) {
                 "tip": "string",
                 "needsFollowUp": boolean
                 }
-              `
+              `,
             },
             {
               inlineData: {
@@ -65,26 +74,29 @@ export async function analyzeDonation(base64Image: string) {
 
     // In the new SDK, 'text' is a property, not a function call
     const text = response.text;
-    
+
     // Clean up any potential markdown formatting
     const cleanJson = text?.replace(/```json|```/g, "").trim();
-    
+
     if (!cleanJson) {
       throw new Error("No response text received from Gemini API");
     }
-    
-    return JSON.parse(cleanJson);
 
-  } catch (error) {
-    console.error("Gemini Sustainability Error:", error);
+    return JSON.parse(cleanJson);
+  } catch (error: any) {
+    console.error("Gemini Error:", error);
+    
+    const isRateLimit = error.message?.includes('429');
+    
     return {
-      item: "Analysis Error",
+      item: isRateLimit ? "System Refueling..." : "Analysis Error",
       decision: "Recycle",
-      hazard: "Unknown",
-      reason: "The AI was unable to process this image. Please check your connection or API key.",
-      category: "N/A",
+      reason: isRateLimit 
+        ? "We're receiving a high volume of scans. Please wait 5 seconds and try again!" 
+        : "The AI couldn't see this clearly. Please check lighting.",
+      category: "Other",
       estimatedValue: 0,
-      tip: "Ensure the item is well-lit and clearly visible."
+      tip: "Hackathon Tip: Try scanning one item at a time for the best accuracy."
     };
   }
 }

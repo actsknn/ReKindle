@@ -1,56 +1,113 @@
-# Welcome to your Expo app 👋
+# ReKindle
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A cross-platform mobile app (iOS + Android) that acts as a donor's pre-trip assistant. Scan items, get an AI verdict, see local demand, schedule a drop-off, and track your impact.
 
-## Get started
+Contributors: Adi, Shreyas, Ajay, Joe, Jason
 
-1. Install dependencies
+## What it does
+
+- **Scan** items with your camera — Gemini 1.5 Flash classifies them as Resell or Recycle.
+- **Triage** — approved items get routed to the best nearby Goodwill location; redirected items get pointed to the right partner (e-waste, textile recycler, etc.).
+- **Heatmap** — see which nearby locations need what, card-based list.
+- **Schedule** drop-offs at a time slot that works for you.
+- **Dashboard** — track total items donated, lbs diverted, CO2 saved, and resale value generated.
+
+## Tech stack
+
+- Expo (React Native) + expo-router
+- Gemini 1.5 Flash for image analysis
+- Supabase for data (locations, demand, donations, schedules)
+- Google Maps for directions
+
+## Prerequisites
+
+- Node.js 18+ and npm
+- An Expo account (optional, for device testing)
+- The Expo Go app on your phone, or an iOS simulator / Android emulator
+- API keys for:
+  - Google Gemini (`@google/genai`)
+  - Supabase (URL + anon key)
+
+## Setup
+
+1. Clone the repo and install dependencies:
 
    ```bash
+   git clone <this-repo>
+   cd ReKindle
    npm install
    ```
 
-2. Start the app
+2. Add your API keys. Create a `.env` file in the project root (or set the env vars however you normally do):
 
-   ```bash
-   npx expo start
+   ```
+   EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_key
+   EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
-In the output, you'll find options to open the app in a
+3. Seed Supabase with the four tables the app expects: `locations`, `demand`, `scans_history`, `profiles`. Insert 3–5 real Goodwill locations near your demo venue.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Running the app
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Start the dev server:
 
 ```bash
-npm run reset-project
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Then pick a target:
 
-### Other setup steps
+```bash
+npm run ios       # iOS simulator
+npm run android   # Android emulator
+npm run web       # web preview
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Or scan the QR code in the terminal with the Expo Go app on a physical device. **For camera features, use a real device — simulators have limited camera support.**
 
-## Learn more
+## Using the app
 
-To learn more about developing your project with Expo, look at the following resources:
+1. **Open the app.** You'll land on the home tab.
+2. **Tap Scan.** The camera opens. Point at an item and tap the white circle to capture a photo. You can capture multiple photos for a bundle. Tap **Finish** to send them to Gemini. Tap **← Back** in the top-left corner to leave the scanner without scanning.
+3. **Review the verdict.** You'll see the item, category, a Resell/Recycle badge, estimated resale value, and a prep tip. From here you can:
+   - **Confirm & Save** — logs the scan and takes you to the Impact dashboard.
+   - **Override** — flip the decision if Gemini got it wrong (earns bonus points).
+   - **Cancel / Rescan** — dismiss the card and start over.
+4. **Map tab.** Browse nearby Goodwill locations with their current top needs and surpluses. Tap a location to schedule a drop-off.
+5. **Impact tab.** See your cumulative stats — items scanned, lbs diverted, CO2 saved, resale value generated.
+6. **Profile tab.** Manage your account and view pending points.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Project structure
 
-## Join the community
+```
+src/
+  app/
+    _layout.tsx          # root layout
+    camera.tsx           # scanner screen
+    (tabs)/
+      index.tsx          # home
+      map.tsx            # demand heatmap
+      impact.tsx         # dashboard
+      profile.tsx        # profile
+  components/            # shared UI
+  services/
+    gemini.ts            # Gemini API calls
+    supabase.ts          # Supabase client
+  hooks/
+  constants/
+```
 
-Join our community of developers creating universal apps.
+## Scripts
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- `npm start` — start Expo dev server
+- `npm run ios` / `npm run android` / `npm run web` — start on a specific platform
+- `npm run lint` — run Expo's linter
+- `npm run reset-project` — reset to a fresh template (destructive)
+
+## Troubleshooting
+
+- **Camera permission denied** — open device settings and re-enable camera access for Expo Go, or use the in-app Allow Camera button.
+- **Gemini misclassifies an item** — use the Override button on the result card.
+- **Supabase slow on conference WiFi** — the demand data is cached at app startup; pull-to-refresh to retry.
+- **Rate-limited by Gemini** — wait a second and retry; the app handles this automatically.
