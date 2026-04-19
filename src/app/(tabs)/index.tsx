@@ -107,6 +107,7 @@ export default function HomeScreen() {
   });
 
   return (
+<<<<<<< HEAD
     <ScrollView
       style={styles.container}
       contentContainerStyle={[
@@ -118,6 +119,14 @@ export default function HomeScreen() {
         <Text style={styles.hey}>Hey,</Text>
         <Text style={styles.name}>Adi</Text>
         <Text style={styles.tagline}>Ready to rekindle something today?</Text>
+=======
+    <View style={styles.container}>
+      
+      {/* 1. Dashboard Placeholder */}
+      <View style={styles.dashboardCard}>
+        <Text style={styles.greeting}>Welcome back!</Text>
+        <Text style={styles.stagtsText}>You have 150 GoodCycle Points</Text>
+>>>>>>> 06339609a30da081adc4824d9dee80901868a28c
       </View>
 
       <View style={styles.scanWrapper}>

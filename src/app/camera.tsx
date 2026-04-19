@@ -162,6 +162,7 @@ export default function CameraScreen() {
           <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
 
+<<<<<<< HEAD
         <TouchableOpacity
           style={styles.flipButton}
           onPress={() => setFacing(facing === "back" ? "front" : "back")}
@@ -176,6 +177,47 @@ export default function CameraScreen() {
           </TouchableOpacity>
         </View>
       </CameraView>
+=======
+                {saving ? (
+                  <ActivityIndicator size="large" color="#4CAF50" />
+                ) : (
+                  <View>
+                    <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
+                      <Text style={styles.buttonText}>Confirm & Save</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.overrideButton} onPress={handleOverride}>
+                      <Text style={styles.buttonText}>Override: Actually {result.decision === 'Recycle' ? 'Resell' : 'Recycle'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.cancelButton} onPress={() => { setResult(null); setPhotoBatch([]); }}>
+                      <Text style={[styles.buttonText, { color: '#666', fontSize: 16 }]}>Cancel / Rescan</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </SafeAreaView>
+      ) : (
+        <CameraView style={styles.camera} ref={cameraRef}>
+          <SafeAreaView style={styles.uiOverlay}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <View style={styles.counterBadge}>
+              <Text style={styles.scanInstruction}>{photoBatch.length === 0 ? "Point & Scan" : `${photoBatch.length} Photos Captured`}</Text>
+            </View>
+            <View style={styles.buttonContainer}>
+              {loading ? <ActivityIndicator size="large" color="#ffffff" /> : (
+                <View style={styles.controlsRow}>
+                  <TouchableOpacity style={styles.captureButton} onPress={handleAddPhoto}><View style={styles.innerCircle} /></TouchableOpacity>
+                  {photoBatch.length > 0 && <TouchableOpacity style={styles.processButton} onPress={handleProcessBatch}><Text style={styles.buttonText}>Finish</Text></TouchableOpacity>}
+                </View>
+              )}
+            </View>
+          </SafeAreaView>
+        </CameraView>
+      )}
+>>>>>>> 06339609a30da081adc4824d9dee80901868a28c
     </View>
   );
 }
@@ -183,6 +225,7 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
   camera: { flex: 1 },
+<<<<<<< HEAD
   backButton: {
     position: "absolute",
     top: 60,
@@ -272,6 +315,52 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
     borderRadius: 16,
     padding: 16,
+=======
+  uiOverlay: { flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingVertical: 40 },
+  scanInstruction: { color: '#fff', fontSize: 18, fontWeight: '600', backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 20 },
+  buttonContainer: { marginBottom: 30 },
+  captureButton: { width: 84, height: 84, borderRadius: 42, borderWidth: 4, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
+  innerCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#fff' },
+  counterBadge: { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  controlsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 20 },
+  resultOverlay: { flex: 1, backgroundColor: '#f5f5f5', justifyContent: 'center', padding: 20 },
+  resultCard: { backgroundColor: '#fff', padding: 30, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
+  title: { fontSize: 28, fontWeight: '800', marginBottom: 10, color: '#1a1a1a' },
+  badge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, marginBottom: 15 },
+  badgeText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  bodyText: { fontSize: 16, color: '#444', lineHeight: 22, marginBottom: 15 },
+  valueText: { fontSize: 20, fontWeight: 'bold', color: '#2E7D32', marginBottom: 10 },
+  tipText: { fontSize: 14, color: '#666', fontStyle: 'italic', marginBottom: 25 },
+  buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  resultContainer: { flex: 1, padding: 40, justifyContent: 'center', alignItems: 'center' },
+  processButton: { backgroundColor: '#4CAF50', paddingVertical: 16, paddingHorizontal: 24, borderRadius: 14, alignItems: 'center' },
+  confirmButton: { backgroundColor: '#4CAF50', paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginBottom: 10 },
+  overrideButton: { backgroundColor: '#FF9800', paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginBottom: 10 },
+  cancelButton: { backgroundColor: '#efefef', paddingVertical: 12, borderRadius: 14, alignItems: 'center' },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 10
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  // ADDED INPUT STYLE
+  input: {
+    backgroundColor: '#f0f0f0',
+    padding: 15,
+    borderRadius: 12,
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 20,
+>>>>>>> 06339609a30da081adc4824d9dee80901868a28c
     borderWidth: 1,
     borderColor: "#1e1e1e",
   },
