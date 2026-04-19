@@ -11,7 +11,7 @@ export default function HomeScreen() {
       {/* 1. Dashboard Placeholder */}
       <View style={styles.dashboardCard}>
         <Text style={styles.greeting}>Welcome back!</Text>
-        <Text style={styles.statsText}>You have 150 GoodCycle Points</Text>
+        <Text style={styles.stagtsText}>You have 150 GoodCycle Points</Text>
       </View>
 
       {/* 2. The Big Scan Button */}
