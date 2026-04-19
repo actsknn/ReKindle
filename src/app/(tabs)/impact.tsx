@@ -1,684 +1,521 @@
-import { supabase } from "@/services/supabase"; // <-- ADDED SUPABASE IMPORTS
+import { supabase } from "@/services/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router"; // <-- ADDED FOR LIVE UPDATES
-import React, { useCallback, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
+  Modal,
+  Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// ... (keep all your type definitions and CATEGORY_ICONS, UPCOMING, and HISTORY mock data exactly as they were) ...
+// Matches your camera.tsx dummy user
+const USER_ID = "user-123";
 
-type UpcomingDropOff = {
+// --- Types ---
+type Profile = {
+  user_id: string;
+  total_items_scanned: number;
+  pending_points: number;
+  approved_points: number;
+};
+
+type Scan = {
+  id: string;
+  user_id: string;
+  category: string;
+  item_name: string;
+  points_awarded: number; // Matches your Supabase DB column
+  status: string;
+  created_at: string;
+};
+
+type UpcomingItem = { id: string; name: string; category: string };
+
+type UpcomingDrop = {
   id: string;
   location: string;
   when: string;
-  itemCount: number;
-  distance: string;
+  items: UpcomingItem[];
 };
 
-type ScanItem = {
-  id: string;
-  name: string;
-  category: string;
-  credits: number;
-  dollars: number;
+// --- Helpers ---
+const getCategoryIcon = (category: string): keyof typeof Ionicons.glyphMap => {
+  const c = (category || "").toLowerCase();
+  
+  if (c.includes("electronic") || c.includes("tech")) return "laptop-outline";
+  if (c.includes("cloth") || c.includes("apparel") || c.includes("footwear") || c.includes("accessories")) return "shirt-outline";
+  if (c.includes("book") || c.includes("media") || c.includes("entertainment")) return "book-outline";
+  if (c.includes("furniture") || c.includes("linen") || c.includes("domestics")) return "bed-outline";
+  if (c.includes("appliance") || c.includes("kitchen") || c.includes("houseware")) return "home-outline";
+  if (c.includes("toy") || c.includes("game")) return "game-controller-outline";
+  if (c.includes("tool") || c.includes("hardware")) return "hammer-outline";
+  if (c.includes("sport") || c.includes("outdoor")) return "bicycle-outline";
+  if (c.includes("antique") || c.includes("collectible")) return "star-outline";
+  
+  return "cube-outline"; 
 };
 
-type ScanTrip = {
-  id: string;
-  date: string;
-  status: "dropped_off" | "pending";
-  location: string;
-  items: ScanItem[];
+const formatRelativeDate = (iso: string) => {
+  if (!iso) return "Today";
+  const now = new Date();
+  const then = new Date(iso);
+  const diffDays = Math.floor((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "1 day ago";
+  if (diffDays <= 7) return `${diffDays} days ago`;
+  return then.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
-  Electronics: "laptop-outline",
-  "Clothing & Accessories": "shirt-outline",
-  Furniture: "bed-outline",
-  "Books & Media": "book-outline",
-  Books: "book-outline",
-  Kitchenware: "restaurant-outline",
-  Appliances: "restaurant-outline",
-  "Toys & Games": "game-controller-outline",
-  "Home Decor": "home-outline",
-  Home: "home-outline",
-  "Tools & Hardware": "hammer-outline",
-  "Sports & Outdoors": "bicycle-outline",
-  "Baby & Kids": "happy-outline",
-};
-
-const UPCOMING: UpcomingDropOff[] = [
+// Mock data for the teammate's Upcoming Drops UI
+const initialUpcoming: UpcomingDrop[] = [
   {
     id: "u1",
-    location: "ReKindle · Midtown",
+    location: "Goodwill · Midtown",
     when: "Tomorrow · 10:00 AM",
-    itemCount: 6,
-    distance: "0.8 mi",
+    items: [
+      { id: "i1", name: "Denim jacket", category: "clothing" },
+      { id: "i2", name: "Wool sweater", category: "clothing" },
+      { id: "i3", name: "Old iPhone 11", category: "electronics" },
+    ],
   },
   {
     id: "u2",
-    location: "ReKindle · Riverside",
-    when: "Sat, Apr 26 · 2:00 PM",
-    itemCount: 3,
-    distance: "2.3 mi",
-  },
-];
-
-const HISTORY: ScanTrip[] = [
-  {
-    id: "h1",
-    date: new Date(Date.now() - 2 * 86400000).toISOString(),
-    status: "dropped_off",
-    location: "Midtown",
+    location: "Goodwill · Riverside",
+    when: "Sat · 11:00 AM",
     items: [
-      {
-        id: "i1",
-        name: 'MacBook Pro 13"',
-        category: "Electronics",
-        credits: 6200,
-        dollars: 620,
-      },
-      {
-        id: "i2",
-        name: "Wool overcoat",
-        category: "Clothing & Accessories",
-        credits: 450,
-        dollars: 45,
-      },
-    ],
-  },
-  {
-    id: "h2",
-    date: new Date(Date.now() - 5 * 86400000).toISOString(),
-    status: "pending",
-    location: "Riverside",
-    items: [
-      {
-        id: "i3",
-        name: "Desk lamp",
-        category: "Home Decor",
-        credits: 0,
-        dollars: 0,
-      },
-    ],
-  },
-  {
-    id: "h3",
-    date: new Date(Date.now() - 7 * 86400000).toISOString(),
-    status: "dropped_off",
-    location: "Highland",
-    items: [
-      {
-        id: "i4",
-        name: "Paperback books",
-        category: "Books & Media",
-        credits: 200,
-        dollars: 20,
-      },
-      {
-        id: "i5",
-        name: "Kitchen mixer",
-        category: "Kitchenware",
-        credits: 200,
-        dollars: 20,
-      },
-    ],
-  },
-  {
-    id: "h4",
-    date: new Date(Date.now() - 22 * 86400000).toISOString(),
-    status: "dropped_off",
-    location: "Midtown",
-    items: [
-      {
-        id: "i6",
-        name: "Vintage denim jacket",
-        category: "Clothing & Accessories",
-        credits: 150,
-        dollars: 15,
-      },
+      { id: "i4", name: "Desk lamp", category: "furniture" },
     ],
   },
 ];
-
-function formatRelativeDate(iso: string): string {
-  const now = new Date();
-  const d = new Date(iso);
-  const diffMs = now.getTime() - d.getTime();
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffDays <= 0) return "Today";
-  if (diffDays === 1) return "1 day ago";
-  if (diffDays <= 7) return `${diffDays} days ago`;
-
-  const month = d.toLocaleString("en-US", { month: "short" });
-  const day = d.getDate();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return sameYear ? `${month} ${day}` : `${month} ${day}, ${d.getFullYear()}`;
-}
-
-
-const DUMMY_USER_ID = "user-123";
 
 export default function ImpactScreen() {
   const insets = useSafeAreaInsets();
-  const [expandedTrip, setExpandedTrip] = useState<string | null>("h1");
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  
+  // --- State ---
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [scans, setScans] = useState<Scan[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [expandedTrip, setExpandedTrip] = useState<string | null>(null);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [upcoming, setUpcoming] = useState<UpcomingDrop[]>(initialUpcoming);
+  const [changeModalFor, setChangeModalFor] = useState<string | null>(null);
+  const [addItemText, setAddItemText] = useState("");
 
-  // --- CHANGED THESE FROM CONST TO LIVE STATE VARIABLES ---
-  const [readyCredits, setReadyCredits] = useState(0);
-  const [pendingCredits, setPendingCredits] = useState(0);
-  const [itemsDonated, setItemsDonated] = useState(0);
-  const [totalDonated, setTotalDonated] = useState(0);
-
-  // --- ADDED FETCH TO PULL FROM DATABASE EVERY TIME YOU VIEW THE SCREEN ---
-  useFocusEffect(
-    useCallback(() => {
-      fetchImpactStats();
-    }, [])
-  );
-
-  const fetchImpactStats = async () => {
+  // --- Data Fetching ---
+  const load = async () => {
     try {
-      const { data } = await supabase
+      const { data: p } = await supabase
         .from("profiles")
-        .select("total_items_scanned, pending_points, approved_points")
-        .eq("user_id", DUMMY_USER_ID)
+        .select("*")
+        .eq("user_id", USER_ID)
         .single();
 
-      if (data) {
-        setPendingCredits(data.pending_points || 0);
-        setReadyCredits(data.approved_points || 0);
-        setItemsDonated(data.total_items_scanned || 0);
-        
-        // Let's assume dollars is roughly 10% of approved points plus some base value for the demo
-        setTotalDonated((data.approved_points || 0) / 10);
-      }
+      const { data: s } = await supabase
+        .from("scans_history")
+        .select("*")
+        .eq("user_id", USER_ID)
+        .order("created_at", { ascending: false });
+
+      if (p) setProfile(p);
+      if (s) setScans(s);
     } catch (e) {
-      console.error(e);
+      console.log("[impact] load error", e);
     }
   };
 
-  const handleChange = (id: string) => {
-    setOpenMenu(null);
-    Alert.alert("Edit batch", "You can edit the items in this batch.");
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
   };
 
-  const handleCancel = (id: string) => {
-    setOpenMenu(null);
+  // --- Data Processing ---
+  const trips = useMemo(() => {
+    const byDate = new Map<string, Scan[]>();
+    for (const s of scans) {
+      const key = (s.created_at || new Date().toISOString()).slice(0, 10);
+      const arr = byDate.get(key) ?? [];
+      arr.push(s);
+      byDate.set(key, arr);
+    }
+    return Array.from(byDate.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([date, items]) => ({
+        id: date,
+        date,
+        items,
+        totalCredits: items.reduce((sum, it) => sum + (it.points_awarded || 0), 0),
+        status: items.every((it) => it.status === "approved") ? "approved" : "pending",
+      }));
+  }, [scans]);
+
+  const visibleTrips = showAllHistory ? trips : trips.slice(0, 3);
+
+  // --- Computed Stats ---
+  const readyCredits = profile?.approved_points ?? 0;
+  const pendingCredits = profile?.pending_points ?? 0;
+  const totalItems = profile?.total_items_scanned ?? 0;
+  const lifetimeCredits = readyCredits + pendingCredits;
+
+  // --- Handlers ---
+  const handleCancel = (dropId: string) => {
+    setOpenMenuId(null);
     Alert.alert(
-      "Cancel drop-off",
-      "Are you sure you want to cancel this drop-off?",
+      "Cancel drop-off?",
+      "Are you sure you want to cancel this batch?",
       [
-        { text: "Keep", style: "cancel" },
-        { text: "Cancel it", style: "destructive" },
-      ],
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          style: "destructive",
+          onPress: () => {
+            setUpcoming((prev) => prev.filter((d) => d.id !== dropId));
+          },
+        },
+      ]
     );
   };
 
+  const handleChange = (dropId: string) => {
+    setOpenMenuId(null);
+    setChangeModalFor(dropId);
+  };
+
+  const removeItemFromDrop = (dropId: string, itemId: string) => {
+    setUpcoming((prev) =>
+      prev.map((d) =>
+        d.id === dropId ? { ...d, items: d.items.filter((i) => i.id !== itemId) } : d
+      )
+    );
+  };
+
+  const addItemToDrop = (dropId: string) => {
+    const name = addItemText.trim();
+    if (!name) return;
+    setUpcoming((prev) =>
+      prev.map((d) =>
+        d.id === dropId
+          ? {
+              ...d,
+              items: [...d.items, { id: `i${Date.now()}`, name, category: "other" }],
+            }
+          : d
+      )
+    );
+    setAddItemText("");
+  };
+
+  const changeModalDrop = upcoming.find((d) => d.id === changeModalFor) ?? null;
+
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{
-        paddingTop: insets.top + 20,
-        paddingBottom: insets.bottom + 40,
-        paddingHorizontal: 20,
-      }}
-    >
-      <Text style={styles.eyebrow}>YOUR IMPACT</Text>
-      <Text style={styles.title}>This year, so far</Text>
+    <View style={styles.root}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 20 }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#5bc4f5" />}
+      >
+        <Text style={styles.pageTitle}>Impact</Text>
 
-      {/* Hero Credits Card */}
-      <View style={styles.heroCard}>
-        <View style={styles.heroTextBlock}>
-          <Text style={styles.heroLabel}>REKINDLE CREDITS</Text>
-          <Text style={styles.heroValue}>{readyCredits}</Text>
-          <Text style={styles.heroCaption}>
-            ≈ ${(readyCredits / 10).toFixed(2)} in store credit · 10¢ per credit
-          </Text>
-        </View>
-        <View style={styles.heroIcon}>
-          <Ionicons
-            name="cash-outline"
-            size={80}
-            color="rgba(255,255,255,0.25)"
-          />
-        </View>
-      </View>
-
-      {pendingCredits > 0 && (
-        <View style={styles.pendingPill}>
-          <Ionicons name="hourglass-outline" size={14} color="#5bc4f5" />
-          <Text style={styles.pendingText}>
-            +{pendingCredits} credits pending review
-          </Text>
-        </View>
-      )}
-
-      {/* Stat cards */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <View style={styles.statIcon}>
-            <Ionicons name="bag-handle-outline" size={16} color="#5bc4f5" />
-          </View>
-          <Text style={styles.statLabel}>ITEMS DONATED</Text>
-          <Text style={styles.statValue}>{itemsDonated}</Text>
-        </View>
-        <View style={styles.statCard}>
-          <View style={styles.statIcon}>
-            <Ionicons name="cash-outline" size={16} color="#5bc4f5" />
-          </View>
-          <Text style={styles.statLabel}>TOTAL DONATED</Text>
-          <Text style={styles.statValue}>${totalDonated.toFixed(2)}</Text>
-        </View>
-      </View>
-
-      {/* Upcoming drop-offs */}
-      <Text style={styles.sectionTitle}>Upcoming drop-offs</Text>
-      {UPCOMING.map((u) => (
-        <View key={u.id} style={styles.upcomingCard}>
-          <View style={styles.upcomingIcon}>
-            <Ionicons name="calendar-outline" size={22} color="#5bc4f5" />
-          </View>
-          <View style={styles.upcomingContent}>
-            <Text style={styles.upcomingLocation}>{u.location}</Text>
-            <Text style={styles.upcomingMeta}>
-              {u.when} · {u.itemCount} items
+        {/* Hero Section */}
+        <View style={styles.hero}>
+          <View style={styles.heroTextBlock}>
+            <Text style={styles.heroLabel}>READY TO SPEND</Text>
+            <Text style={styles.heroValue}>{readyCredits}</Text>
+            <Text style={styles.heroSub}>
+              credits · ≈ ${(readyCredits * 0.10).toFixed(2)}
             </Text>
-          </View>
-          <Text style={styles.upcomingDistance}>{u.distance}</Text>
-          <TouchableOpacity
-            onPress={() => setOpenMenu(openMenu === u.id ? null : u.id)}
-            style={styles.menuBtn}
-          >
-            <Ionicons name="ellipsis-vertical" size={18} color="#888" />
-          </TouchableOpacity>
-          {openMenu === u.id && (
-            <View style={styles.menu}>
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => handleChange(u.id)}
-              >
-                <Ionicons name="create-outline" size={16} color="#5bc4f5" />
-                <Text style={styles.menuText}>Change</Text>
-              </TouchableOpacity>
-              <View style={styles.menuDivider} />
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => handleCancel(u.id)}
-              >
-                <Ionicons
-                  name="close-circle-outline"
-                  size={16}
-                  color="#ff4444"
-                />
-                <Text style={[styles.menuText, { color: "#ff4444" }]}>
-                  Cancel
+            {pendingCredits > 0 && (
+              <View style={styles.pendingPill}>
+                <Ionicons name="time-outline" size={14} color="#ffd66b" />
+                <Text style={styles.pendingPillText}>
+                  +{pendingCredits} credits pending review
                 </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      ))}
-
-      {/* Full scan history */}
-      <View style={styles.historyHeader}>
-        <Text style={styles.sectionTitle}>Full scan history</Text>
-        <Text style={styles.historyCount}>{HISTORY.length} trips</Text>
-      </View>
-
-      {HISTORY.map((t) => {
-        const expanded = expandedTrip === t.id;
-        const totalCredits = t.items.reduce((s, i) => s + i.credits, 0);
-        const totalDollars = t.items.reduce((s, i) => s + i.dollars, 0);
-
-        return (
-          <View key={t.id} style={styles.historyCard}>
-            <TouchableOpacity
-              style={styles.historyRow}
-              onPress={() => setExpandedTrip(expanded ? null : t.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.historyIcon}>
-                <Ionicons name="calendar-outline" size={20} color="#5bc4f5" />
-              </View>
-              <View style={styles.historyMiddle}>
-                <Text style={styles.historyDate}>
-                  {formatRelativeDate(t.date)}
-                </Text>
-                <Text style={styles.historyMeta}>
-                  {t.items.length} items · {t.location}
-                </Text>
-              </View>
-              <View style={styles.historyRight}>
-                <View
-                  style={[
-                    styles.statusPill,
-                    t.status === "pending"
-                      ? styles.statusPillPending
-                      : styles.statusPillDone,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      t.status === "pending"
-                        ? styles.statusTextPending
-                        : styles.statusTextDone,
-                    ]}
-                  >
-                    {t.status === "pending" ? "PENDING REVIEW" : "DROPPED OFF"}
-                  </Text>
-                </View>
-                <Text style={styles.historyCredits}>+{totalCredits}c</Text>
-                <Text style={styles.historyDollars}>${totalDollars}</Text>
-              </View>
-              <Ionicons
-                name={expanded ? "chevron-up" : "chevron-down"}
-                size={18}
-                color="#666"
-                style={{ marginLeft: 6 }}
-              />
-            </TouchableOpacity>
-
-            {expanded && (
-              <View style={styles.historyBody}>
-                <View style={styles.miniStatsRow}>
-                  <View style={styles.miniStat}>
-                    <Text style={styles.miniStatLabel}>ITEMS</Text>
-                    <Text style={styles.miniStatValue}>{t.items.length}</Text>
-                  </View>
-                  <View style={styles.miniStat}>
-                    <Text style={styles.miniStatLabel}>MONEY</Text>
-                    <Text style={styles.miniStatValue}>${totalDollars}</Text>
-                  </View>
-                  <View style={styles.miniStat}>
-                    <Text style={styles.miniStatLabel}>CREDITS</Text>
-                    <Text style={styles.miniStatValue}>{totalCredits}</Text>
-                  </View>
-                </View>
-
-                {t.items.map((it) => (
-                  <View key={it.id} style={styles.itemRow}>
-                    <View style={styles.itemThumb}>
-                      <Ionicons
-                        name={
-                          (CATEGORY_ICONS[it.category] || "cube-outline") as any
-                        }
-                        size={22}
-                        color="#5bc4f5"
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.itemName}>{it.name}</Text>
-                      <Text style={styles.itemCategory}>{it.category}</Text>
-                    </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.itemCredits}>+{it.credits}c</Text>
-                      <Text style={styles.itemDollars}>${it.dollars}</Text>
-                    </View>
-                  </View>
-                ))}
               </View>
             )}
           </View>
-        );
-      })}
-    </ScrollView>
+        </View>
+
+        {/* Stats Row */}
+        <View style={styles.statRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Items donated</Text>
+            <Text style={styles.statValue}>{totalItems}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Lifetime credits</Text>
+            <Text style={styles.statValue}>{lifetimeCredits}</Text>
+          </View>
+        </View>
+
+        {/* Upcoming drop-offs */}
+        <Text style={styles.section}>Upcoming drop-offs</Text>
+        {upcoming.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="cube-outline" size={22} color="#444" />
+              <Text style={styles.emptyText}>No upcoming drop-offs scheduled.</Text>
+            </View>
+          </View>
+        ) : (
+          upcoming.map((d) => (
+            <View key={d.id} style={styles.upcomingCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.upcomingLocation}>{d.location}</Text>
+                <Text style={styles.upcomingWhen}>{d.when}</Text>
+                <Text style={styles.upcomingMeta}>{d.items.length} items</Text>
+              </View>
+              <View style={{ position: "relative" }}>
+                <TouchableOpacity
+                  style={styles.dotsBtn}
+                  onPress={() => setOpenMenuId(openMenuId === d.id ? null : d.id)}
+                >
+                  <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+                </TouchableOpacity>
+                {openMenuId === d.id && (
+                  <View style={styles.menu}>
+                    <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={() => handleChange(d.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="create-outline" size={20} color="#5bc4f5" />
+                      <Text style={styles.menuText}>Change</Text>
+                    </TouchableOpacity>
+                    <View style={styles.menuDivider} />
+                    <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={() => handleCancel(d.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="close-circle-outline" size={20} color="#ff6b6b" />
+                      <Text style={[styles.menuText, { color: "#ff6b6b" }]}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+          ))
+        )}
+
+        {/* Scan History (Live from Supabase) */}
+        <Text style={styles.section}>Scan history</Text>
+        {trips.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="scan-outline" size={22} color="#444" />
+              <Text style={styles.emptyText}>No scans yet. Start by scanning an item.</Text>
+            </View>
+          </View>
+        ) : (
+          <>
+            {visibleTrips.map((trip) => {
+              const isOpen = expandedTrip === trip.id;
+              const isApproved = trip.status === "approved";
+              return (
+                <View key={trip.id} style={styles.tripCard}>
+                  <TouchableOpacity
+                    style={styles.tripHeader}
+                    onPress={() => setExpandedTrip(isOpen ? null : trip.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.tripDate}>{formatRelativeDate(trip.date)}</Text>
+                      <Text style={styles.tripMeta}>
+                        {trip.items.length} {trip.items.length === 1 ? "item" : "items"} · {trip.totalCredits} credits
+                      </Text>
+                    </View>
+                    <View style={[styles.statusPill, isApproved ? styles.approvedPill : styles.pendingPillStatus]}>
+                      <Text style={[styles.statusText, isApproved ? styles.approvedText : styles.pendingTextStatus]}>
+                        {isApproved ? "Approved" : "Pending"}
+                      </Text>
+                    </View>
+                    <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#888" style={{ marginLeft: 10 }} />
+                  </TouchableOpacity>
+
+                  {isOpen && (
+                    <View style={styles.tripBody}>
+                      {trip.items.map((it) => (
+                        <View key={it.id} style={styles.tripItem}>
+                          <View style={styles.itemIconWrap}>
+                            <Ionicons name={getCategoryIcon(it.category)} size={18} color="#5bc4f5" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itemName}>{it.item_name}</Text>
+                            <Text style={styles.itemCategory}>{it.category}</Text>
+                          </View>
+                          <Text style={styles.itemCredits}>+{it.points_awarded}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
+            {trips.length > 3 && (
+              <TouchableOpacity
+                style={styles.showMoreBtn}
+                onPress={() => setShowAllHistory(!showAllHistory)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.showMoreText}>
+                  {showAllHistory ? "Show less" : `Show more (${trips.length - 3})`}
+                </Text>
+                <Ionicons name={showAllHistory ? "chevron-up" : "chevron-down"} size={16} color="#5bc4f5" />
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </ScrollView>
+
+      {/* Change Modal */}
+      <Modal
+        visible={!!changeModalFor}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setChangeModalFor(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setChangeModalFor(null)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>{changeModalDrop?.location}</Text>
+            <Text style={styles.modalSubtitle}>{changeModalDrop?.when}</Text>
+
+            <Text style={styles.modalSection}>Items in this batch</Text>
+            <ScrollView style={{ maxHeight: 280 }}>
+              {(changeModalDrop?.items ?? []).length === 0 ? (
+                <Text style={styles.emptyText}>No items in this batch yet.</Text>
+              ) : (
+                changeModalDrop?.items.map((it) => (
+                  <View key={it.id} style={styles.modalItem}>
+                    <View style={styles.itemIconWrap}>
+                      <Ionicons name={getCategoryIcon(it.category)} size={18} color="#5bc4f5" />
+                    </View>
+                    <Text style={styles.modalItemName}>{it.name}</Text>
+                    <TouchableOpacity
+                      onPress={() => removeItemFromDrop(changeModalDrop.id, it.id)}
+                      style={styles.removeBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#ff6b6b" />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <Text style={styles.modalSection}>Add item</Text>
+            <View style={styles.addRow}>
+              <TextInput
+                style={styles.addInput}
+                placeholder="e.g. Winter coat"
+                placeholderTextColor="#555"
+                value={addItemText}
+                onChangeText={setAddItemText}
+              />
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={() => changeModalDrop && addItemToDrop(changeModalDrop.id)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add" size={22} color="#0a0a0a" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.doneBtn} onPress={() => setChangeModalFor(null)} activeOpacity={0.8}>
+              <Text style={styles.doneText}>Done</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0a0a0a" },
-  eyebrow: {
-    color: "#5bc4f5",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-    marginBottom: 6,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 32,
-    fontWeight: "700",
-    marginBottom: 20,
-  },
-  heroCard: {
-    backgroundColor: "#5bc4f5",
-    borderRadius: 22,
-    padding: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    overflow: "hidden",
-  },
+  root: { flex: 1, backgroundColor: "#0a0a0a" },
+  content: { padding: 20, paddingBottom: 40 },
+  pageTitle: { color: "#fff", fontSize: 28, fontWeight: "700", marginBottom: 20 },
+  
+  hero: { backgroundColor: "#111", borderRadius: 20, padding: 22, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e" },
   heroTextBlock: { flex: 1 },
-  heroLabel: {
-    color: "#0a0a0a",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  heroValue: {
-    color: "#ffffff",
-    fontSize: 56,
-    fontWeight: "800",
-    letterSpacing: -2,
-    lineHeight: 60,
-  },
-  heroCaption: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 12,
-    marginTop: 6,
-  },
-  heroIcon: {
-    position: "absolute",
-    right: -10,
-    top: 0,
-    bottom: 0,
-    justifyContent: "center",
-  },
-  pendingPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(91,196,245,0.12)",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignSelf: "flex-start",
-    marginTop: 10,
-  },
-  pendingText: { color: "#5bc4f5", fontSize: 12, fontWeight: "600" },
-  statsRow: { flexDirection: "row", gap: 12, marginTop: 14 },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#111",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#1e1e1e",
-    gap: 6,
-  },
-  statIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: "rgba(91,196,245,0.12)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  statLabel: {
-    color: "#666",
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-  statValue: {
-    color: "#fff",
-    fontSize: 26,
-    fontWeight: "800",
-    letterSpacing: -1,
-  },
-  sectionTitle: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "700",
-    marginTop: 32,
-    marginBottom: 12,
-  },
-  upcomingCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#111",
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1e1e1e",
-    marginBottom: 10,
-    position: "relative",
-  },
-  upcomingIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "rgba(91,196,245,0.15)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  upcomingContent: { flex: 1 },
-  upcomingLocation: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  heroLabel: { color: "#888", fontSize: 11, fontWeight: "600", letterSpacing: 1.2, marginBottom: 4 },
+  heroValue: { color: "#fff", fontSize: 54, fontWeight: "700" },
+  heroSub: { color: "#888", fontSize: 13, marginTop: 2 },
+  
+  pendingPill: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255, 214, 107, 0.12)", borderColor: "rgba(255, 214, 107, 0.35)", borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, alignSelf: "flex-start", marginTop: 12, gap: 6 },
+  pendingPillText: { color: "#ffd66b", fontSize: 12, fontWeight: "500" },
+  
+  statRow: { flexDirection: "row", gap: 12, marginTop: 14 },
+  statCard: { flex: 1, backgroundColor: "#111", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#1e1e1e", gap: 6 },
+  statLabel: { color: "#888", fontSize: 12 },
+  statValue: { color: "#fff", fontSize: 22, fontWeight: "700", marginTop: 6 },
+  
+  section: { color: "#fff", fontSize: 16, fontWeight: "600", marginTop: 28, marginBottom: 12 },
+  
+  upcomingCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10 },
+  upcomingLocation: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  upcomingWhen: { color: "#5bc4f5", fontSize: 13, marginTop: 2 },
   upcomingMeta: { color: "#888", fontSize: 12, marginTop: 2 },
-  upcomingDistance: {
-    color: "#666",
-    fontSize: 12,
-    fontWeight: "600",
-    marginRight: 8,
-  },
-  menuBtn: { padding: 6 },
-  menu: {
-    position: "absolute",
-    top: 50,
-    right: 10,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    width: 130,
-    zIndex: 10,
-    overflow: "hidden",
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  menuDivider: { height: 1, backgroundColor: "#2a2a2a" },
-  menuText: { color: "#fff", fontSize: 13, fontWeight: "600" },
-  historyHeader: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    marginTop: 32,
-    marginBottom: 12,
-  },
-  historyCount: { color: "#666", fontSize: 13 },
-  historyCard: {
-    backgroundColor: "#111",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#1e1e1e",
-    marginBottom: 10,
-    overflow: "hidden",
-  },
-  historyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-  },
-  historyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "rgba(91,196,245,0.12)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  historyMiddle: { flex: 1 },
-  historyDate: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  historyMeta: { color: "#888", fontSize: 12, marginTop: 2 },
-  historyRight: { alignItems: "flex-end", gap: 2 },
-  statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  statusPillDone: { backgroundColor: "rgba(91,196,245,0.18)" },
-  statusPillPending: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#5bc4f5",
-  },
-  statusText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
-  statusTextDone: { color: "#5bc4f5" },
-  statusTextPending: { color: "#5bc4f5" },
-  historyCredits: { color: "#5bc4f5", fontSize: 16, fontWeight: "800" },
-  historyDollars: { color: "#666", fontSize: 11 },
-  historyBody: {
-    padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#1e1e1e",
-    gap: 10,
-  },
-  miniStatsRow: { flexDirection: "row", gap: 8 },
-  miniStat: {
-    flex: 1,
-    backgroundColor: "#0a0a0a",
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#1e1e1e",
-  },
-  miniStatLabel: {
-    color: "#666",
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-  miniStatValue: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "800",
-    marginTop: 4,
-  },
-  itemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 6,
-  },
-  itemThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "rgba(91,196,245,0.12)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  itemName: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  dotsBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#1a1a1a", justifyContent: "center", alignItems: "center" },
+  
+  menu: { position: "absolute", top: 42, right: 0, backgroundColor: "#1a1a1a", borderRadius: 12, borderWidth: 1, borderColor: "#2a2a2a", paddingVertical: 6, minWidth: 170, zIndex: 50 },
+  menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 16, paddingHorizontal: 18, gap: 14 },
+  menuText: { color: "#fff", fontSize: 16, fontWeight: "500" },
+  menuDivider: { height: 1, backgroundColor: "#2a2a2a", marginHorizontal: 8 },
+  
+  emptyCard: { backgroundColor: "#111", borderRadius: 16, padding: 18, borderWidth: 1, borderColor: "#1e1e1e", justifyContent: "space-between", marginBottom: 12 },
+  emptyText: { color: "#555", fontSize: 13 },
+  
+  tripCard: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10, overflow: "hidden" },
+  tripHeader: { flexDirection: "row", alignItems: "center", padding: 16 },
+  tripDate: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  tripMeta: { color: "#888", fontSize: 12, marginTop: 2 },
+  
+  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, marginLeft: 8 },
+  approvedPill: { backgroundColor: "rgba(80, 210, 140, 0.15)", borderWidth: 1, borderColor: "rgba(80, 210, 140, 0.4)" },
+  pendingPillStatus: { backgroundColor: "rgba(255, 214, 107, 0.12)", borderWidth: 1, borderColor: "rgba(255, 214, 107, 0.35)" },
+  statusText: { fontSize: 11, fontWeight: "600" },
+  approvedText: { color: "#50d28c" },
+  pendingTextStatus: { color: "#ffd66b" },
+  
+  tripBody: { borderTopWidth: 1, borderTopColor: "#1e1e1e", paddingHorizontal: 16, paddingBottom: 12, paddingTop: 6 },
+  tripItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
+  itemIconWrap: { width: 34, height: 34, borderRadius: 10, backgroundColor: "rgba(91, 196, 245, 0.1)", justifyContent: "center", alignItems: "center", marginRight: 12 },
+  itemName: { color: "#fff", fontSize: 14, fontWeight: "500" },
   itemCategory: { color: "#888", fontSize: 12, marginTop: 2 },
-  itemCredits: { color: "#5bc4f5", fontSize: 14, fontWeight: "800" },
-  itemDollars: { color: "#666", fontSize: 11 },
+  itemCredits: { color: "#5bc4f5", fontSize: 14, fontWeight: "600" },
+  
+  showMoreBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#111", borderRadius: 14, paddingVertical: 14, borderWidth: 1, borderColor: "#1e1e1e", marginTop: 6 },
+  showMoreText: { color: "#5bc4f5", fontSize: 14, fontWeight: "600" },
+  
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  modalSheet: { backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, paddingBottom: 40, borderTopWidth: 1, borderColor: "#1e1e1e" },
+  modalHandle: { width: 40, height: 4, backgroundColor: "#333", borderRadius: 2, alignSelf: "center", marginBottom: 16 },
+  modalTitle: { color: "#fff", fontSize: 22, fontWeight: "700" },
+  modalSubtitle: { color: "#5bc4f5", fontSize: 14, marginTop: 4 },
+  modalSection: { color: "#888", fontSize: 12, fontWeight: "600", letterSpacing: 1, marginTop: 20, marginBottom: 8, textTransform: "uppercase" },
+  modalItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#1e1e1e" },
+  modalItemName: { color: "#fff", fontSize: 15, flex: 1 },
+  removeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,107,107,0.12)", justifyContent: "center", alignItems: "center" },
+  
+  addRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+  addInput: { flex: 1, backgroundColor: "#1a1a1a", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: "#fff", borderWidth: 1, borderColor: "#2a2a2a" },
+  addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#5bc4f5", justifyContent: "center", alignItems: "center" },
+  doneBtn: { marginTop: 22, backgroundColor: "#5bc4f5", borderRadius: 14, paddingVertical: 14, alignItems: "center" },
+  doneText: { color: "#0a0a0a", fontSize: 15, fontWeight: "700" }
 });
