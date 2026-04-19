@@ -2,7 +2,7 @@
 
 A cross-platform mobile app (iOS + Android) that acts as a donor's pre-trip assistant. Scan items, get an AI verdict, see local demand, schedule a drop-off, and track your impact.
 
-Built by Joe and Jason.
+Contributors: Adi, Shreyas, Ajay, Joe, Jason
 
 ## What it does
 
